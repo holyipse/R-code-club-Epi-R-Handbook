@@ -14,14 +14,20 @@ knitr::opts_chunk$set(echo = TRUE)
 # load the package for use
 pacman::p_load(
 	epirhandbook,
-	rio,
-	foreign,
-	ggplot2,
-	magrittr,
-	dplyr
+	rio,          # importing data  
+	here,         # relative file pathways  
+	janitor,      # data cleaning and tables
+	lubridate,    # working with dates; is.POSIXct()
+	matchmaker,   # dictionary-based cleaning
+	epikit,       # age_categories() function
+	dplyr,        # data management
+	tidyselect    # helper function; everything() to re-order columns, across(), summarise(), contains(), starts_with(), ends_with(), matches(), num_range(), any_of()
+	# tidyverse   # data management and visualization  
 	)
 
 ```
+
+
 
 
 
