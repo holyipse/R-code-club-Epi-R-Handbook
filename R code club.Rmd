@@ -21,8 +21,8 @@ pacman::p_load(
 	matchmaker,   # dictionary-based cleaning
 	epikit,       # age_categories() function
 	dplyr,        # data management
-	tidyselect    # helper function; everything() to re-order columns, across(), summarise(), contains(), starts_with(), ends_with(), matches(), num_range(), any_of()
-	# tidyverse   # data management and visualization  
+	tidyselect,   # helper function; everything() to re-order columns, across(), summarise(), contains(), starts_with(), ends_with(), matches(), num_range(), any_of()
+	tidyverse   # data management and visualization
 	)
 
 ```
