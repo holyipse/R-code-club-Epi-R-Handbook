@@ -6,28 +6,89 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+
+# install.packages("pacman")
 
 # install the latest version of the Epi R Handbook package
 # pacman::p_install_gh("appliedepi/epirhandbook")
 
 # load the package for use
 pacman::p_load(
-	epirhandbook,
+	# epirhandbook,
 	rio,          # importing data  
 	here,         # relative file pathways  
 	janitor,      # data cleaning and tables
 	lubridate,    # working with dates; is.POSIXct()
 	matchmaker,   # dictionary-based cleaning
 	epikit,       # age_categories() function
-	dplyr,        # data management
+	tidyverse,   # data management and visualization
+	tidyr,       # drop_na(), complete()
 	tidyselect,   # helper function; everything() to re-order columns, across(), summarise(), contains(), starts_with(), ends_with(), matches(), num_range(), any_of()
-	tidyverse   # data management and visualization
-	)
+	RecordLinkage,  # probabilistic matches
+	fastLink,        # probabilistic matches
+	tibble
+  )
+
+```
+
+
+```{r EpiRHandbook Ch13}
+# pacman::p_install_gh("appliedepi/epirhandbook")
+# download only the linelist example data into a folder on your computer
+get_data(file = "linelist_cleaned.rds")
+
+linelist <- import(here("data","linelist_cleaned.rds"))
+
+
+## count()
+linelist %>% 
+  # produce counts by unique outcome-gender groups
+  count(gender, hospital) %>% 
+  # gather rows by gender (3) and count number of hospitals per gender (6)
+  count(gender, name = "hospitals per gender" ) 
+
+
 
 ```
 
 
 
+## Probablistic Matching
+```{r ch 14.3 probablistic matching}
+# make datasets
 
+cases <- tribble(
+  ~gender, ~first,      ~middle,     ~last,        ~yr,   ~mon, ~day, ~district,
+  "M",     "Amir",      NA,          "Khan",       1989,  11,   22,   "River",
+  "M",     "Anthony",   "B.",        "Smith",      1970, 09, 19,      "River", 
+  "F",     "Marialisa", "Contreras", "Rodrigues",  1972, 04, 15,      "River",
+  "F",     "Elizabeth", "Casteel",   "Chase",      1954, 03, 03,      "City",
+  "M",     "Jose",      "Sanchez",   "Lopez",      1996, 01, 06,      "City",
+  "F",     "Cassidy",   "Jones",      "Davis",     1980, 07, 20,      "City",
+  "M",     "Michael",   "Murphy",     "O'Calaghan",1969, 04, 12,      "Rural", 
+  "M",     "Oliver",    "Laurent",    "De Bordow" , 1971, 02, 04,     "River",
+  "F",      "Blessing",  NA,          "Adebayo",   1955,  02, 14,     "Rural"
+)
+
+results <- tribble(
+  ~gender,  ~first,     ~middle,     ~last,          ~yr, ~mon, ~day, ~district, ~result,
+  "M",      "Amir",     NA,          "Khan",         1989, 11,   22,  "River", "positive",
+  "M",      "Tony",   "B",         "Smith",          1970, 09,   19,  "River", "positive",
+  "F",      "Maria",    "Contreras", "Rodriguez",    1972, 04,   15,  "Cty",   "negative",
+  "F",      "Betty",    "Castel",   "Chase",        1954,  03,   30,  "City",  "positive",
+  "F",      "Andrea",   NA,          "Kumaraswamy",  2001, 01,   05,  "Rural", "positive",      
+  "F",      "Caroline", NA,          "Wang",         1988, 12,   11,  "Rural", "negative",
+  "F",      "Trang",    NA,          "Nguyen",       1981, 06,   10,  "Rural", "positive",
+  "M",      "Olivier" , "Laurent",   "De Bordeaux",  NA,   NA,   NA,  "River", "positive",
+  "M",      "Mike",     "Murphy",    "O'Callaghan",  1969, 04,   12,  "Rural", "negative",
+  "F",      "Cassidy",  "Jones",     "Davis",        1980, 07,   02,  "City",  "positive",
+  "M",      "Mohammad", NA,          "Ali",          1942, 01,   17,  "City",  "negative",
+  NA,       "Jose",     "Sanchez",   "Lopez",        1995, 01,   06,  "City",  "negative",
+  "M",      "Abubakar", NA,          "Abullahi",     1960, 01,   01,  "River", "positive",
+  "F",      "Maria",    "Salinas",   "Contreras",    1955, 03,   03,  "River", "positive"
+  )
+
+
+
+```
 
