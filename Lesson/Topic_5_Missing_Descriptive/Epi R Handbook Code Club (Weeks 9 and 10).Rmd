@@ -1,0 +1,420 @@
+---
+title: "Epi R Handbook Code Club (Weeks 9 & 10): Missing Data & Descriptive Tables"
+output: 
+  learnr::tutorial:
+    theme: flatly
+runtime: shiny_prerendered
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(learnr)
+library(tidyverse)
+library(rio)
+library(here)
+
+load("tutorial_weeks_9_10.RData")
+
+```
+
+## Overview 
+
+Welcome to weeks 9 and 10! Over the next two meetings, we'll go over missing data and then talk about creating descriptive tables. 
+
+### Book Chapters
+
+* [Chapter 20: Missing Data](https://epirhandbook.com/en/missing-data.html){target="_blank"}
+* [Chapter 17: Descriptive Tables](https://epirhandbook.com/en/descriptive-tables.html){target="_blank"}
+
+
+### Notable Packages
+
+* [naniar](https://naniar.njtierney.com/){target="_blank"}: investigating missingness
+* [mice](https://amices.org/mice/){target="_blank"}: data imputation
+
+
+### Bonus Reading
+
+* [R for Data Science: Missing Values](https://r4ds.hadley.nz/missing-values){target="_blank"}
+
+
+## Missing Data {.tabset .tabset-pills}
+
+### Missing Values in R
+
+  \   
+  
+Turns out, there are a lot of ways data can fall out. Here are some common ways that data can go missing in R. 
+
+  \   
+  
+ * **NA**: R's standard, reserved value indicating a missing value. 
+ * **NULL**: Reserved for empty objects, and mostly used in functions and apps. A null value indicates a value that is neither TRUE nor FALSE, but undefined.
+ * **NaN**: An impossible value (stored as a logical), like when you try to divide zero by zero. It behaves like an NA when you try to do math that doesn't make sense. 
+ * **Inf**: An infinite value, also somehow when you try to divide a number by zero. It happens as the result of an impossible bit of math and stores like a number.
+ * Empty or unknown strings: like " ", "", or even "99", depending on how you feel about them.
+
+  \   
+
+The book recommends [this article](https://www.r-bloggers.com/2010/04/r-na-vs-null/){target="_blank"} for learning more about NA vs NULL. For even more bonus reading, [here is an article](https://www.r-bloggers.com/2018/07/r-null-values-null-na-nan-inf/){target="_blank"} about all of the above. 
+
+
+
+```{r missing1, echo=FALSE, warning=FALSE, exercise=TRUE}
+
+  z <- c(1, 22, NA, Inf, NaN, 5)
+
+  max(z)                           # returns NA
+  max(z, na.rm=T)                  # returns Inf
+  max(z[is.finite(z)])             # returns 22
+
+
+```
+
+  \   
+  
+#### The case_when() example
+
+When assigning an NA as part of a data workflow, mostly, NA on its own will do the job. Occasionally, you may need to be a little extra specific with your NAs. Using case_when() is an example of this. 
+
+```{r missing2, echo=FALSE, warning=FALSE, exercise=TRUE}
+
+# Calculating a new variable that may contain missing values
+
+linelist_newcol <- linelist %>% 
+  
+  # Create new "age_years" column from "age" column
+  mutate(age_years = case_when(
+    age_unit == "years"  ~ age,       # if age is given in years, assign original value
+    age_unit == "months" ~ age/12,    # if age is given in months, divide by 12
+    is.na(age_unit)      ~ age,       # if age UNIT is missing, assume years
+    TRUE                 ~ NA_real_))       # any other circumstance, assign missing
+
+```
+
+  \   
+  
+Other examples of specifying the "flavor" of an NA are
+
+* NA - use for dates or logical TRUE/FALSE
+* NA_character_ - use for characters
+* NA_real_ - use for numeric
+
+  \   
+
+**Be on the lookout for the 'NAs introduced by coercion' warning! ** It just means you tried to pass a value in an unexpected format into a value, list, or variable. If this happens, check your values. 
+
+  \   
+
+#### Missing Data on Import
+
+The import() function from the rio package allows you to define how missing values are presented in your data.
+
+  \   
+  
+<center>import(data, **na = c("","99", " ")**)</center>
+
+  \   
+  
+Defining them within the function converts them all to NA on import. 
+
+```{r missing3, warning=FALSE, echo=FALSE}
+
+linelist <- import(here("data","linelist_cleaned.rds"), na = c("","99", " "))
+
+```
+
+### Useful Functions
+
+  \   
+  
+
+This is just a list of useful functions to have, related to missingness. We'll be using the following vector.
+
+  \   
+  
+<center>my_vector <- c(1, 4, 56, NA, 5, NA, 22)</center>
+
+
+**is.na() and !is.na()**
+
+This is a logical check to find missing values. The "!" in the front inverts it, or checks specifically for non-missing values. 
+
+```{r missing5, warning=FALSE, echo=FALSE, exercise=TRUE}
+
+is.na(my_vector)
+
+print(my_vector[!is.na(my_vector)])
+
+
+```
+
+
+**drop_na()**
+
+This is a tidyr function that will remove missing observations, especially useful in piped statements. 
+
+```{r missing6, warning=FALSE, echo=FALSE, exercise=TRUE}
+
+# if you don't specify a column, drop_na() will clean out ANY row with ANY missing data
+new_linelist <- linelist %>% drop_na()
+
+nrow(linelist)
+
+nrow(new_linelist)
+
+# if you only want to clean out data based on certain columns, call them out as an argument in drop_na()
+
+new_new_linelist <- linelist %>% drop_na(date_infection, date_outcome)
+
+nrow(new_new_linelist)
+
+```
+
+
+**na.rm = TRUE**
+
+This is a common argument to most mathematical functions. If you run a mathematical function and find you're getting NAs back, try including na.rm = TRUE. 
+
+```{r missing7, warning=FALSE, echo=FALSE, exercise=TRUE}
+
+# calling a math function on a variable with missing data
+
+median(linelist$age)
+
+# run this one again without the missing values
+
+median(linelist$age, na.rm = TRUE)
+
+```
+
+
+**forcats::fct_explicit()**
+
+If you're following along in the book, this is in a later section, 20.5! To make missing values more useful in a factored variable, the forcats package has the fct_explicit function. The na_level argument is how to define a factor for missing values.
+
+
+There's also replace_NA(), but we'll get to that in a bit. 
+
+
+### The naniar package
+
+The naniar package includes many helpful functions for quantifying missingness. 
+
+```{r missing8, warning=FALSE, echo=FALSE, exercise=TRUE}
+
+library(naniar)
+
+
+# percent of ALL data frame values that are missing
+pct_miss(linelist)
+
+# Percent of rows with any value missing
+pct_miss_case(linelist)   # 69% of records in this data are missing at least one value
+
+# Percent of rows that are complete (no values missing)  
+pct_complete_case(linelist) # 31% of records in this data aren't missing anything at all. 
+
+```
+
+It can also very quickly visualize what's there and what's not. 
+
+```{r missing9, warning=FALSE, echo=FALSE, exercise = TRUE}
+library(naniar)
+
+# show_pct = TRUE will give percents, FALSE will give counts
+# the facet argument will break these values down grouped by variable.
+gg_miss_var(linelist, show_pct = TRUE, facet = source) + labs(title = "Where did my data go?")
+
+```
+
+It can generate a heatplot. 
+
+```{r missing10, warning=FALSE, echo=FALSE, exercise = TRUE}
+library(naniar)
+
+# Examples of heatplots of missingness across the entire data frame  
+
+vis_miss(linelist)
+
+# a more colorful example where you can see missingness across levels of a factor
+gg_miss_fct(linelist, age_cat5)
+
+```
+
+
+It can integrate with ggplot. Normally ggplot will hide missing data. 
+
+```{r missing11, warning=FALSE, echo=FALSE, exercise = TRUE}
+library(naniar)
+
+ggplot(
+  data = linelist,
+  mapping = aes(x = age_years, y = temp)) +     
+  geom_point()
+  # geom_miss_point()
+
+```
+
+It can create extra columns to describe missingness, called "shadow columns"
+
+```{r missing12, warning=FALSE, echo=FALSE, exercise = TRUE}
+library(naniar)
+
+# bind_shadow() creates new columns appended with _NA that are factors of NA or !NA (not NA)
+
+shadow_linelist <- linelist %>%
+  bind_shadow() # sounds like something an arcanist would do
+
+str(shadow_linelist)
+
+ggplot(data = shadow_linelist,          # data frame with shadow columns
+  mapping = aes(x = date_hospitalisation, # numeric or date column
+                colour = age_years_NA)) + # shadow column of interest
+  geom_density()                          # plots the density curves
+
+```
+
+### Imputation
+
+*the art and science of making things up*
+
+Reasons to impute ("fill in") missing data: 
+
+1. So you don't miss out on statistical power. In the drop_na() example where we removed any observation with missing values, we're only left with about 30% of our observations. 
+2. To avoid bias. Depending on why your data are missing (random or otherwise), you may introduce bias by excluding these observations. 
+
+Describing Missingness / Randomness
+
+* **Missing Completely at Random**: The probability of being missing is the same across your data. (easiest to impute)
+* **Missing at Random**: There's a reason and a predictable pattern to missing data based on other information you have. (most common)
+* **Missing Not at Random**: It's not missing randomly and you can't really predictably determine why. (hardest to impute)
+
+
+Here are a few approaches you can take. 
+
+**Mean Imputation**
+
+This is exactly like it sounds, we can impute missing numerical data with the mean of known observations. We'll use the replace_NA function to fill in the mean value. 
+
+```{r impute1, exercise=TRUE}
+
+linelist <- linelist %>%
+  mutate(temp_replace_na_with_mean = replace_na(temp, mean(temp, na.rm = T)))
+
+```
+
+For a categorical variable, some data may be missing because the condition is assumed. 
+
+```{r impute2, exercise=TRUE}
+
+linelist <- linelist %>%
+  mutate(outcome_replace_na_with_death = replace_na(outcome, "Death"))
+
+```
+
+You can also flex statistically by imputing via regression. 
+
+```{r impute3, exercise=TRUE}
+library(naniar)
+
+# temperature is (probably) a function of whether they had a fever and their age
+# returns an lm object
+simple_temperature_model_fit <- lm(temp ~ fever + age_years, data = linelist) 
+
+# using our simple temperature model to predict values just for the observations where temp is missing
+# returns a vector of predicted values for temp where they were missing
+predictions_for_missing_temps <- predict(simple_temperature_model_fit,
+                                        newdata = linelist %>% filter(is.na(temp))) 
+
+gg_miss_var(linelist %>% select(temp, age_years, fever), show_pct = TRUE) + labs(title = "Temp before imputation")
+
+# merge it back in to the main dataset
+linelist$temp[is.na(linelist$temp)] <- predictions_for_missing_temps
+
+gg_miss_var(linelist %>% select(temp, age_years, fever), show_pct = TRUE) + labs(title = "Temp after imputation")
+
+```
+
+
+The mice package (whose very name stresses me out, "Multivariate Imputation by Chained Equations") and function gives us another option for generating a predicted value for missing data. 
+
+Put simply, it looks at the data you have, generates distributions under the hood, and applies reasonable values to missing data based on those distributions. (I hope Tracy isn't too disappointed with me for that description.)
+
+
+```{r impute4, exercise=TRUE}
+
+library(mice)
+
+#create subset data with missings
+model_dataset <- linelist %>%
+  select(temp, fever, age_years)  
+
+# create a mids object, or "multiply imputed data set"
+temp_imputed <- mice(model_dataset, # our patchy data
+                            method = "norm.predict", # Linear regression, predicted values
+                            seed = 1, # setting a seed for reproducible randomness
+                            m = 1, # number of multiple imputations (default is 5)
+                            print = F) # how verbose you want the console to be about it
+
+
+
+# check out what it looked like before
+
+ggplot(
+  data = model_dataset,
+  mapping = aes(x = age_years, y = temp)) +     
+  geom_miss_point()
+
+# merge the missing values of temp back in with complete(), which was NOT in the book
+
+model_dataset <- complete(data = temp_imputed
+                          , action = 1 # if using multiple iterations, tell it which to use
+                          )
+
+# check out what it looks like with imputed data
+ggplot(
+  data = model_dataset,
+  mapping = aes(x = age_years, y = temp)) +     
+  geom_miss_point()
+
+
+```
+
+The plots look pretty similar before and after and that's the point. For more information about mice methods, see [this link](https://search.r-project.org/CRAN/refmans/mice/html/mice.html){target="_blank"}.
+  
+
+
+  
+#### Other methods of imputing
+
+**LOCF** and **BOCF**
+
+These are single imputation techniques. Last observation carried forward (LOCF) and baseline observation carried forward (BOCF). These are meant for time series or longitudinal data, and are what they sound like, filling in data from the last observed data point or a baseline. We touched on this in an earlier section. It uses the fill() function. More information about this style of imputation can be found [here](https://onbiostatistics.blogspot.com/2021/01/single-imputation-methods-for-missing.html){target="_blank"}. 
+
+```{r impute5, exercise=TRUE}
+#creating our simple dataset
+disease <- tibble::tribble(
+  ~quarter, ~year, ~cases,
+  "Q1",    2000,    66013,
+  "Q2",      NA,    69182,
+  "Q3",      NA,    53175,
+  "Q4",      NA,    21001,
+  "Q1",    2001,    46036,
+  "Q2",      NA,    58842,
+  "Q3",      NA,    44568,
+  "Q4",      NA,    50197)
+
+#imputing the missing year values:
+disease %>% fill(year, .direction = "up")
+
+```
+
+
+
+
+
+## Descriptive Tables
+
+Come back next week!

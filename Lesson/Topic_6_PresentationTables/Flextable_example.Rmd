@@ -1,0 +1,111 @@
+---
+title: "Summary values per hospital-outcome group"
+output: 
+  officedown::rdocx_document
+---
+
+
+```{r}
+#| echo = FALSE,
+#| message = FALSE
+
+
+pacman::p_load(tidyverse, flextable, officer)
+
+# import data
+linelist <- readRDS(here::here("Data", "linelist_cleaned.rds"))
+
+# data frame for passing to flextable
+table <- linelist %>% 
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    # ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+    ct = median(ct_blood, na.rm=T)) %>%
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        # ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+        ct = median(ct_blood, na.rm=T))) %>%
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    # values_from = c(ct_value, N),                       # new values are from ct and count columns
+    values_from = c(ct, N),
+    names_from = outcome,
+    names_glue = "{outcome}_{.value}") %>%                # new column names are from outcomes
+  # mutate(                                              # Add new columns
+  #   N_Known = N_Death + N_Recover,                               # number with known outcome
+  #   Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+  #   Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  mutate(Nonmissing = Death_N + Recover_N,
+         Death_Pct = scales::percent(Death_N / Nonmissing, 0.1),
+         Recover_Pct = scales::percent(Recover_N / Nonmissing, 0.1)) %>%
+  # select(                                              # Re-order columns
+  #   hospital, N_Known,                                   # Intro columns
+  #   N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+  #   N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  select(hospital, Nonmissing,
+         Recover_N, Recover_Pct, Recover_ct,
+         Death_N, Death_Pct, Death_ct) %>%
+  arrange(Nonmissing)
+  # arrange(N_Known)                                    # Arrange rows from lowest to highest (Total row at bottom)
+
+# flextable(table) %>%
+#   theme_zebra() %>%
+#   separate_header() %>%
+#   labelizor(labels = c(hospital = "Hospital",
+#                        Nonmissing = "Cases with known outcome",
+#                        Recover = "Recovered",
+#                        Death = "Died",
+#                        Pct = "% of cases",
+#                        ct = "Median CT values")) %>%
+#   vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1)) %>%
+#   align(j=c(4,7), part="body", align="right") %>%
+#   align(i=2, part="header", align="center") %>%
+#   bold(~hospital == "Total", bold=TRUE) %>%
+#   bold(i=1, bold=TRUE, part="header") 
+
+flextable(table) %>%
+  theme_zebra() %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values")) %>%
+  vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1)) %>%
+  align(j=c(4,7), part="body", align="right") %>%
+  align(i=2, part="header", align="center") %>%
+  bold(~hospital == "Total", bold=TRUE) %>%
+  bold(i=1, bold=TRUE, part="header") %>%
+  width(width=c(2, 1, 1, 1, 1, 1, 1, 1)) %>%
+  set_table_properties(layout="fixed")
+
+```
+
+```{r}
+#| echo = FALSE,
+#| message = FALSE
+
+# Code to make the "block" above (table) landscape
+
+block_section(
+  prop_section(
+    page_size = page_size(orient = "landscape"),
+    type = "continuous"
+  )
+)
+```

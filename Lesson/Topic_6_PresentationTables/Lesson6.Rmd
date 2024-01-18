@@ -1,0 +1,372 @@
+---
+title: "Tables for Presentation"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(tidyverse, flextable, janitor, officer)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+The "Visual Markdown Editor" provides a preview of how the markdown syntax will appear after you "knit" the document. You can also use the visual markdown editor to generate markdown syntax. For example, markdown syntax for adding an image is...
+
+![](Picture1.png)
+
+## A descriptive table
+
+The following code chunk is used to summarise the variables "hospital" and "outcome" from the "linelist" data set.
+
+```{r descriptive}
+# import data
+linelist <- readRDS(here::here("Data", "linelist_cleaned.rds"))
+
+# variables in analysis
+linelist %>%
+  janitor::tabyl(hospital, outcome)
+```
+
+## Example from chapter 29
+
+Create a data frame that you will pass to "flextable".
+
+```{r hospitals}
+#| message = FALSE
+
+# data frame for passing to flextable
+table <- linelist %>% 
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    values_from = c(ct_value, N),                       # new values are from ct and count columns
+    names_from = outcome) %>%                           # new column names are from outcomes
+  mutate(                                              # Add new columns
+    N_Known = N_Death + N_Recover,                               # number with known outcome
+    Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+    Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  select(                                              # Re-order columns
+    hospital, N_Known,                                   # Intro columns
+    N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+    N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  arrange(N_Known)                                    # Arrange rows from lowest to highest (Total row at bottom)
+
+flextable(table)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the table.
+
+## Formating the table header
+
+Edit the code chunk to add a multi-level header.  Column names need to include a single "\_" so that the "separate_header" function will create 2 levels.  Rename the "ct_value_{outcome}" variable.  Then, add "separate_header()" to the flextable function.
+
+```{r headers}
+#| echo = FALSE,
+#| message = FALSE
+
+# data frame for passing to flextable
+table <- linelist %>% 
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    # ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+    ct = median(ct_blood, na.rm=T)) %>%
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        # ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+        ct = median(ct_blood, na.rm=T))) %>%
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    # values_from = c(ct_value, N),                       # new values are from ct and count columns
+    values_from = c(ct, N),
+    names_from = outcome) %>%                           # new column names are from outcomes
+  mutate(                                              # Add new columns
+    N_Known = N_Death + N_Recover,                               # number with known outcome
+    Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+    Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  # select(                                              # Re-order columns
+  #   hospital, N_Known,                                   # Intro columns
+  #   N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+  #   N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  select(hospital, N_Known,
+         N_Recover, Pct_Recover, ct_Recover,
+         N_Death, Pct_Death, ct_Death) %>%
+  arrange(N_Known)                                    # Arrange rows from lowest to highest (Total row at bottom)
+
+flextable(table) %>%
+  separate_header()
+```
+\
+Edit the code to create column names that are more easily divided into multi-level labels.  The code below uses the "names_glue" option to put the "outcome" label ahead of the "N" or "ct".
+
+```{r relabel}
+#| echo = FALSE,
+#| message = FALSE
+
+# data frame for passing to flextable
+table <- linelist %>% 
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    # ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+    ct = median(ct_blood, na.rm=T)) %>%
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        # ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+        ct = median(ct_blood, na.rm=T))) %>%
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    # values_from = c(ct_value, N),                       # new values are from ct and count columns
+    values_from = c(ct, N),
+    names_from = outcome,
+    names_glue = "{outcome}_{.value}") %>%                # new column names are from outcomes
+  # mutate(                                              # Add new columns
+  #   N_Known = N_Death + N_Recover,                               # number with known outcome
+  #   Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+  #   Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  mutate(N_Known = Death_N + Recover_N) %>%
+  # select(                                              # Re-order columns
+  #   hospital, N_Known,                                   # Intro columns
+  #   N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+  #   N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  select(hospital, N_Known,
+         Recover_N, Recover_ct,
+         Death_N, Death_ct) %>%
+  arrange(N_Known)                                    # Arrange rows from lowest to highest (Total row at bottom)
+
+flextable(table) %>%
+  separate_header()
+```
+\
+Relabel the "N_Known" variable so that the header doesn't get divided and add the percentages back into the table.
+
+```{r nonmissing}
+#| echo = FALSE,
+#| message = FALSE
+
+# data frame for passing to flextable
+table <- linelist %>% 
+  
+  # Get summary values per hospital-outcome group
+  ###############################################
+  group_by(hospital, outcome) %>%                      # Group data
+  summarise(                                           # Create new summary columns of indicators of interest
+    N = n(),                                            # Number of rows per hospital-outcome group     
+    # ct_value = median(ct_blood, na.rm=T)) %>%           # median CT value per group
+    ct = median(ct_blood, na.rm=T)) %>%
+  
+  # add totals
+  ############
+  bind_rows(                                           # Bind the previous table with this mini-table of totals
+    linelist %>% 
+      filter(!is.na(outcome) & hospital != "Missing") %>%
+      group_by(outcome) %>%                            # Grouped only by outcome, not by hospital    
+      summarise(
+        N = n(),                                       # Number of rows for whole dataset     
+        # ct_value = median(ct_blood, na.rm=T))) %>%     # Median CT for whole dataset
+        ct = median(ct_blood, na.rm=T))) %>%
+  
+  # Pivot wider and format
+  ########################
+  mutate(hospital = replace_na(hospital, "Total")) %>% 
+  pivot_wider(                                         # Pivot from long to wide
+    # values_from = c(ct_value, N),                       # new values are from ct and count columns
+    values_from = c(ct, N),
+    names_from = outcome,
+    names_glue = "{outcome}_{.value}") %>%                # new column names are from outcomes
+  # mutate(                                              # Add new columns
+  #   N_Known = N_Death + N_Recover,                               # number with known outcome
+  #   Pct_Death = scales::percent(N_Death / N_Known, 0.1),         # percent cases who died (to 1 decimal)
+  #   Pct_Recover = scales::percent(N_Recover / N_Known, 0.1)) %>% # percent who recovered (to 1 decimal)
+  mutate(Nonmissing = Death_N + Recover_N,
+         Death_Pct = scales::percent(Death_N / Nonmissing, 0.1),
+         Recover_Pct = scales::percent(Recover_N / Nonmissing, 0.1)) %>%
+  # select(                                              # Re-order columns
+  #   hospital, N_Known,                                   # Intro columns
+  #   N_Recover, Pct_Recover, ct_value_Recover,            # Recovered columns
+  #   N_Death, Pct_Death, ct_value_Death)  %>%             # Death columns
+  select(hospital, Nonmissing,
+         Recover_N, Recover_Pct, Recover_ct,
+         Death_N, Death_Pct, Death_ct) %>%
+  arrange(Nonmissing)
+  # arrange(N_Known)                                    # Arrange rows from lowest to highest (Total row at bottom)
+
+flextable(table) %>%
+  separate_header()
+```
+\
+Fix the table header using more "flextable" options.  The "labelizor" option relabels the column headers.
+
+```{r labelizor}
+#| echo = FALSE,
+#| message = FALSE
+
+flextable(table) %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values"))
+```
+\
+Add a border using the "vline" function.  The columns that will have a vertical border are specified as an argument to "vline" with "j=c(2,5)".
+
+```{r borders}
+
+flextable(table) %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values")) %>%
+  vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1))
+
+```
+\
+Note that the columns for the percentages are left aligned and the other numeric columns are right aligned.  Change the alignment of columns 4 and 7.
+
+```{r alignment}
+
+flextable(table) %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values")) %>%
+  vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1)) %>%
+  align(j=c(4,7), part="body", align="right")
+
+```
+\
+Center align the second row of table headers
+
+```{r center}
+
+flextable(table) %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values")) %>%
+  vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1)) %>%
+  align(j=c(4,7), part="body", align="right") %>%
+  align(i=2, part="header", align="center")
+
+```
+\
+Make the "total" row bold using the "bold" function. The arguments for the "bold" function can specify the row number with "i" or you can specify which row should be bold using conditional formatting.  See below for examples that use "i" and conditional formatting.
+
+```{r bold}
+
+flextable(table) %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values")) %>%
+  vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1)) %>%
+  align(j=c(4,7), part="body", align="right") %>%
+  align(i=2, part="header", align="center") %>%
+  bold(~hospital == "Total", bold=TRUE) %>%
+  bold(i=1, bold=TRUE, part="header")
+
+```
+\
+Add shading on alternating rows by specifying a theme. 
+
+```{r theme}
+
+flextable(table) %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values")) %>%
+  vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1)) %>%
+  align(j=c(4,7), part="body", align="right") %>%
+  align(i=2, part="header", align="center") %>%
+  bold(~hospital == "Total", bold=TRUE) %>%
+  bold(i=1, bold=TRUE, part="header") %>%
+  theme_zebra()
+
+```
+\
+Note that "theme" function caused the vertical borders to be removed.  By reordering the flextable functions, we can add the vertical borders back into the table.
+
+```{r zebra}
+
+flextable(table) %>%
+  theme_zebra() %>%
+  separate_header() %>%
+  labelizor(labels = c(hospital = "Hospital",
+                       Nonmissing = "Cases with known outcome",
+                       Recover = "Recovered",
+                       Death = "Died",
+                       Pct = "% of cases",
+                       ct = "Median CT values")) %>%
+  vline(j=c(2,5), part="all", border=officer::fp_border(color="black", width=1)) %>%
+  align(j=c(4,7), part="body", align="right") %>%
+  align(i=2, part="header", align="center") %>%
+  bold(~hospital == "Total", bold=TRUE) %>%
+  bold(i=1, bold=TRUE, part="header") 
+
+```

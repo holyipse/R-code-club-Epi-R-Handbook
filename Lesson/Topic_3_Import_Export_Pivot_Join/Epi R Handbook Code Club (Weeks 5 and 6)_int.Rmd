@@ -1,0 +1,894 @@
+---
+title: 'Epi R Handbook Code Club (Weeks 5 & 6): Import, Export, Pivot, Join'
+output:
+  learnr::tutorial:
+    theme: flatly
+runtime: shiny_prerendered
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+pacman::p_load(
+  rio, # importing and exporting files
+  here, # managing file paths
+  tidyverse, # the entire tidyverse
+  googlesheets4, # for reading googlesheets
+  jsonlite, # for working with json data
+  httr, # for working with APIs
+  learnr, # interactivity
+  fastLink, # probabalistic matching
+  DBI, # database connections + querying
+  odbc # database connection support
+  
+)
+
+load("tutorial weeks 5_6.rdata")
+
+```
+
+
+
+## Overview  {.tabset .tabset-pills}
+
+**Welcome to week 5/6!** 
+
+This week, we'll start out by learning a few easy ways to read in (import), convert, and write out (export) data. We'll move into how to reshape your data (pivoting) and then wrap up with learning how to bring together related data by joining. 
+
+**Structure**
+
+* 40-45 minutes lecture (questions welcome!)
+* 10-15 minutes questions / time to play and break stuff
+
+<br><br>
+
+### Book Chapters
+
+<br>
+
+* [Import and export](https://epirhandbook.com/en/import-and-export.html){target="_blank"} 
+* [Pivoting data](https://epirhandbook.com/en/pivoting-data.html){target="_blank"} 
+* [Joining data](https://epirhandbook.com/en/joining-data.html){target="_blank"} 
+
+
+### Notable Packages
+
+<br><br>
+
+* [rio](https://cran.r-project.org/web/packages/rio/vignettes/rio.html){target="_blank"} : R I/O, for importing, converting, exporting data
+* [here](https://cran.r-project.org/web/packages/here/vignettes/here.html){target="_blank"} : building and managing file paths
+* [tidyverse](https://www.tidyverse.org/){target="_blank"}: No introduction needed!
+* [fastLink](https://cran.r-project.org/web/packages/fastLink/fastLink.pdf){target="_blank"}: probabalistic data matching
+
+
+
+
+## Chapter 7: Import and Export {.tabset .tabset-pills}
+
+### Filepaths
+
+Before you can start I/Oing data, it's helpful to know where the data is. 
+
+<br>
+
+<center>![](`r here("images","directory_struc.png")`)</center>
+
+<br><br>
+
+
+#### Types of file paths
+
+##### **Relative**
+
+A relative path is defined *relative* to the root of an R project. By default, R/Posit respect relative paths within project directories. Either your project directory or your root R directory (where all your R packages get installed. )
+
+
+```{r ch7_fp1}
+
+# this is an example of getting a list of files using a relative file path 
+
+  list.files("images")
+
+```
+
+ 
+<br><br>
+
+
+##### **Absolute**
+
+An Absolute path is when the entire path is spelled out in full. 
+
+The book advises against using absolute file paths, BUT, if you keep scrolling, there's a note: "One scenario where absolute file paths may be appropriate is when you want to import a file from a shared drive that has the same full file path for all users."
+
+For a lot of our work, that's us! If you must use absolute file paths, it may be helpful to store the path as an object in an easy to see/edit spot at the top of your program. 
+
+```{r ch7_fp2}
+
+# assigning the full path to an object early on (use either forward slashes OR double up on backslashes to "escape" them.)
+
+  path1 <- "//cdc.gov/project/NCHHSTP_DSTD_Project/STD Morb/"
+  
+# list the first five files found in the path provided
+
+  head(list.files(path1))
+
+```
+
+  
+<br><br>
+
+
+##### **Manual**
+
+A manual path is defined through the user interface or with the file.choose() function.
+
+![File > Import Dataset](`r here("images","manual_filepaths.png")`)
+
+
+<br><br>
+
+
+#### Note about the here package
+
+The book recommends using the here package to easily reference file locations. It works by dropping a tiny "anchor" file in your project's root directory and redirecting from that point. Here are some examples that use the here package.
+
+There may be conflicts between the here package and dplyr, so if you start running into errors, just be sure to specify here::here().
+
+```{r ch7_here1}
+# use an empty here statement to find out where you're working.
+
+  here()
+
+
+# here is an example of using here() to get a list of files in a subdirectory
+
+  list.files(here("images"))
+
+```
+
+
+
+### Importing Data
+
+The import function of the rio package is a one-stop shop for grabbing a huge range of data types. See [this link](https://cran.r-project.org/web/packages/rio/vignettes/rio.html#Supported_file_formats) for the full list of supported data types. It works by scanning the file name for an extension and then using a subpackage to read in that specific file type. The documentation recommends running install_formats() the first time you use the rio package to get the full range of functionality. 
+
+In the data subdirectory of my project, I've got four different data files. 
+
+<br><br>
+
+
+<center>![](`r here("images","disparate_filetypes.png")`)</center>
+
+<br><br>
+
+
+```{r ch7_imp1}
+
+# The rio package only needs one function to handle all four data types in my subdirectory. 
+
+  df1 <- import(here("data", "example1.xlsx"))
+
+  df2 <- import(here("data", "example2.csv"))
+
+  df3 <- import(here("data", "example3.sas7bdat"))
+
+  df4 <- import(here("data", "example4.rds"))
+
+
+```
+
+Having one single function also makes it easy to build out iterative loops to walk through a directory and bring in everything. There will be more on that in the next few weeks! 
+
+<br><br>
+
+
+#### Selecting a file by Metadata
+
+The dir_info function for the fs package shows metadata information about files in your directories. You can use this function to pick the most recent file to work with. 
+
+```{r ch7_imp2}
+library(fs)
+
+latest_file <- dir_info(here("data")) %>%  # collect file info on all files in directory
+  arrange(desc(modification_time)) %>%      # sort by modification time
+  head(1) %>%                               # keep only the top (latest) file
+  pull(path) %>%                            # extract only the file path
+  import()                                  # import the file
+
+latest_file
+```
+
+  
+<br><br>
+
+
+  
+#### Importing from an Online Source
+
+In general, importing data from an online source requires a URL to the data file, and occasionally, some credentials. Google Sheets, for example, may require you to authenticate with your google account. Package options for working with data stored in Google include googlesheets4 and googledrive. [This link](https://arbor-analytics.com/post/getting-your-data-into-r-from-google-sheets/) from the book has a full tutorial. 
+
+For most public facing data, a URL is enough, though it helps to know your delimiters. 
+
+Let's check out a previous example that pulled delimited census data.
+
+**Delimited data**
+
+```{r ch7_imp3, exercise=TRUE}
+# revisiting the census example from the last section
+
+  # Store URL as object
+  stateDataURL <- "https://www2.census.gov/geo/docs/reference/codes2020/national_state2020.txt"
+  
+  # Before, Jeremy used the read_delim function. The import function can do the same thing, and does its best to detect a delimiter.
+  state.data <- import(stateDataURL)
+  
+  # Print data
+  print(head(state.data))
+
+```
+
+  
+  
+<br><br>
+
+##### **Google Sheets**
+
+Pulling data from Google sheets looks a lot like pulling data from any other online data source. You need a URL and a function to access it. It can use either an absolute URL or relative. The readsheets() function builds out the initial part of the URL when needed. The googlesheets4 package uses an additional authentication step that will have you log in with your google account. 
+
+<center>![](`r here("images","google_auth.png")`)</center>
+
+<br><br>
+
+##### **API Data + JSON**
+
+API data requires a bit more work. You still need a URL or path, but then you can also define query parameters through a custom request, and then submit that specific request to get a response that contains the data you requested. Import CAN handle bringing in JSON data natively with the jsonlite package, but customizing the parameters of your query requires a boost from other packages. In the example below, we're using httr and jsonlite. 
+
+The import is structured with a request, where we define and customize our query, and a response, where the results of the query get returned. 
+
+[Documentation for the API used in the example](https://api.ratings.food.gov.uk/Help){target="_blank"}
+
+
+```{r ch7_imp4, exercise=TRUE, warning=FALSE}
+
+# step 1, define the location of the data
+path2 <- "http://api.ratings.food.gov.uk/Establishments"
+
+
+# step 2a, define the parameters of your data request (this will look a little different for different APIs)
+request <- GET(url = path2,
+             query = list(
+               localAuthorityId = 188,
+               BusinessTypeId = 7844,
+               pageNumber = 1,
+               pageSize = 10),
+             add_headers("x-api-version" = "2")# this argument specifies the API's version 2 headers. (in the documentation)
+             ) 
+
+# step 2b, check for any server error ("200" is good!)
+request$status_code
+
+# step 3, submit the request, parse the response, and convert to a data frame
+response <- content(request, as = "text", encoding = "UTF-8") %>% #returns a raw json string
+  fromJSON(flatten = TRUE) %>% # formats the raw json into a list of lists
+  pluck("establishments") %>% # pulls aspects of the list of lists (not necessary if you're comfortable with double bracket navigation)
+  as_tibble() # format into a tibble
+
+# peek at the data
+str(response)
+
+
+```
+
+  
+
+<br><br>
+
+
+
+#### Bonus! Importing from SQL
+
+SQL data is not natively handled by the import function, but more and more of our data lives on SQL servers. Here is an example of how you could import data in from a SQL source using the DBI and odbc packages. 
+
+```{r ch7_imp5, warning=FALSE}
+
+library(DBI)
+library(odbc)
+
+# set up a connection to a server
+
+  server <- dbConnect(
+    odbc(), 
+    driver = "ODBC Driver 17 for SQL Server", 
+    server = "dspv-nifm-zsql1.hce.cdc.gov\\prod",
+    database = "DSTDP_MORB",
+    Trusted_Connection = "Yes"
+  )
+
+# submit a sql query
+  
+  sql_data <- dbGetQuery(server, "select top 10 YEAR, STATE, EVENT from netss.NETSS")
+  
+# peek at the data
+  
+  head(sql_data)
+
+```
+
+### Exporting
+
+The rio package offers us the one-stop-shop function to export: export(). It's as straightforward as the import function.
+
+```{r ch7_exp1}
+
+# write to your directory
+
+  export(
+    latest_file, file = here("data", "latest_file.rds")
+  )
+
+
+# a nested conversion example
+
+  export(
+    x = import(here("data","example1.xlsx")), # read in an xlsx
+    file = here("data","example1.rds") # write out an rds
+    
+  )
+
+```
+
+
+<br><br>
+
+
+#### Saving plots
+
+Later chapters get more in depth about plots, but before we get there, the author of the book recommends using ggsave() in ggplot2 for saving down plots. 
+
+
+
+## Chapter 12: Pivoting Data {.tabset .tabset-pills}
+
+This chapter covers how to reshape data between a wide format, where a single row contains ALL information for an observation (a country, a person, a case, etc.), and a long format, where all the information for an observation can be across multiple rows. 
+
+Data can be in one or both of these formats. Our HL7 data is an example that comes in as a mix of both, where non-repeating data elements are in one huge, wide table, and repeating elements are in separate long tables.
+
+[R for Data Science](https://r4ds.hadley.nz/data-tidy) has an overview of Wide and Long formats in the context of tidying up your data that is helpful to review. 
+
+
+<br><br>
+
+
+
+### Wide-to-Long
+
+
+#### Wide Data
+
+A wide data set contains everything about an observation in a single row. This can look like a country column with multiple year columns that store information about those years. This might be useful if you're just presenting the table on it's own, where it's intuitive to see a country, and look across columns to view information about those years. 
+
+If you want to analyze or visualize this data, it may make it easier to create a single column for all years, so you can then reference the single grouped column to generate output. 
+
+<br><br>
+
+
+#### pivot_longer()
+
+pivot_longer() from the tidyverse is what we'll use to make our wide data longer. 
+
+
+<center>![In this example from the book, the column names indicated are used to populate a new "year" column, and the values from those columns get moved into "cases".](`r here("images","pivot_longer_new.png")`){width=60%}</center>
+
+<br><br>
+
+
+```{r ch12_wide1, exercise=TRUE}
+
+# import example data where age group information for each facility is stored in its own column
+# note that each facility is on a row by itself.
+
+  count_data <- malaria_facility_count_data
+
+  tibble(head(count_data))
+  
+# pivot this data so information about age groups moves to their own rows. 
+
+  count_data_longer <- count_data %>%
+    pivot_longer(
+      cols = c("malaria_rdt_0-4","malaria_rdt_5-14","malaria_rdt_15","malaria_tot")
+      # cols = 6:9 # you can also identify columns by their indexes
+      # cols = "malaria_rdt_0-4":"malaria_tot" # or with a range of names
+      # cols = starts_with("malaria_") # or with wildcards
+      , names_to = "age_group"
+      , values_to = "count"
+    )
+
+  head(count_data_longer)
+
+  
+    
+```
+
+
+In the examples above, we pivoted from columns using a single data type. In the next example, we'll pivot using multiple data types. 
+
+```{r ch12_wide2}
+
+# setting up a wide dataframe with status values collected at three time points
+df5 <- data.frame(rbind(
+  
+  c('A',	'2021-04-23',	'Healthy',	'2021-04-24',	'Healthy',	'2021-04-25',	'Unwell'),
+  c('B',	'2021-04-23',	'Healthy',	'2021-04-24',	'Healthy',	'2021-04-25',	'Healthy'),
+  c('C',	'2021-04-23',	'Missing',	'2021-04-24',	'Healthy',	'2021-04-25',	'Healthy'))
+  
+  ) 
+
+colnames(df5) <- c('id','obs1_date','obs1_status','obs2_date','obs2_status',	'obs3_date',	'obs3_status')
+
+head(df5)
+
+# pivot these data on everything but the identifier
+
+df_longer <- df5 %>%
+  pivot_longer(cols = -id, names_to = "observation")
+
+head(df_longer)
+
+
+# split out the observations into a date and a status and then pipe in some formatting
+
+df_longer2 <- df5 %>%
+  pivot_longer(cols = -id, 
+               names_to = c("observation", ".value"), # ".value" indicates that a component of the names_to field should override what the values are called. This will be further defined with names_sep.
+               names_sep = "_" ) %>% 
+  mutate(
+    date = date %>% lubridate::as_date(),
+    observation = 
+      observation %>% 
+      str_remove_all("obs") %>% 
+      as.numeric()
+  )
+
+head(df_longer2)
+
+
+```
+
+
+  
+
+### Long-to-Wide
+
+#### Long Data
+
+In a long data set, information about each observation can be found against one or many rows. As discussed above, it can be useful for analysis and visualization, especially when there's a need describe data in groups. 
+
+If you need to transform long data to a wide format (like in the example where you ONLY want to show a descriptive table), the pivot_wider() function is quite handy. 
+
+<center>![In this example from the book, the column names from from the "year" column using the "names_from" argument and cell values in the new dataset come from the "cases" column, using the values_from argument. ](`r here("images","pivot_wider_new.png")`){width=60%}</center>
+
+<br><br>
+
+
+```{r ch12_long1}
+
+# bring in some example data and make it long
+
+  df6 <- linelist_cleaned %>%
+          count(age_cat, gender)
+
+  head(df6)
+  
+# make a wider version that can be displayed on its own
+  
+  df_wider <- df6 %>%
+    pivot_wider(
+      id_cols = age_cat,
+      names_from = gender,
+      values_from = n
+  )
+    
+  head(df_wider)
+  
+
+```
+
+Future weeks (Upcoming topics 5 and 6) will cover this in much more depth, but the janitor package has some nice functions to boost the formatting of tables for presentation.
+
+
+<br><br>
+
+
+
+### Fill
+
+If either pivoting or binding datasets together results in cell gaps, one solution is to fill in missing data. 
+
+```{r ch12_fill1, exercise=TRUE}
+# create two almost-matching data sets, df1 and df2
+
+  df7 <- 
+    tibble::tribble(
+         ~Measurement, ~Facility, ~Cases,
+                    1,  "Hosp 1",     66,
+                    2,  "Hosp 1",     26,
+                    3,  "Hosp 1",      8,
+                    1,  "Hosp 2",     71,
+                    2,  "Hosp 2",     62,
+                    3,  "Hosp 2",     70,
+                    1,  "Hosp 3",     47,
+                    2,  "Hosp 3",     70,
+                    3,  "Hosp 3",     38
+         )
+  
+  df8 <- 
+    tibble::tribble(
+      ~Year, ~Measurement, ~Facility, ~Cases,
+       2000,            1,  "Hosp 4",     82,
+       2001,            2,  "Hosp 4",     87,
+       2002,            3,  "Hosp 4",     46
+    )
+  
+
+# combine the two data sets and fill in missing year values
+  
+  df_combined <- bind_rows(df7, df8) %>% 
+    arrange(Measurement, Facility) %>% 
+    fill(Year, .direction = "up")
+
+  df_combined
+
+```
+
+df1 has three columns, while df2 has four. The author combines these with a bind_rows() function and uses a piped fill() function to populate the missing years from the first dataset. 
+
+**Editorial Note**: In this theoretical example with made up data, filling in years this way may make sense. IRL, it would probably require a lot of validation and maybe some modeling. Use with caution!
+
+## Chapter 14: Joining Data
+
+Joining data takes two or more data sets and brings them together, using one or more variables or characteristics that they have in common. They are super common and useful, especially if you work a lot with relational data. 
+
+
+<br><br>
+
+
+### Types of Joins {.tabset}
+
+#### inner join
+
+returns ONLY what both sides of the join have in common
+  
+  <center>![](`r here("images","joins","inner.png")`){width=50%}</center>
+
+#### full/outer join
+
+returns ALL rows on both sides of the join, even if they don't have anything in common. 
+
+  <center>![](`r here("images","joins","outer.png")`){width=50%}</center>
+  
+#### directional join (left or right)
+
+returns all rows from one table, and only matching rows from the other.
+
+  <center>![](`r here("images","joins","left.png")`){width=50%}</center>
+  
+
+  <center>![](`r here("images","joins","right.png")`){width=50%}</center>
+  
+
+#### anti join
+
+returns ONLY rows from where table where NO match was found in another. 
+
+  <center>![](`r here("images","joins","anti.png")`){width=50%}</center>
+  
+
+<br><br>
+
+
+### dplyr Joins
+
+Tidyverse includes a function for all of the join types described previously. The syntax used across the board for the dplyr functions looks like this: 
+
+<br><br>
+
+<center>**xxxx_join(    [x],    y,     by  =  "variable in common"    )**</center>
+
+<br><br>
+
+x can be either explicit, like when you use the join by itself, or implicit, inherited from piping. x is generally considered the left half of the join. 
+
+y is the right side of the join. 
+
+The "by" argument is one or more variables common to both data sets. When there's one variable in common, and it has the same name on both sides, you can just quote it: by="variable". If two or more variables are used, or the names of the variable are different, use c() to combine and map: c("var1"="ID, "var2"). The resulting table will keep the "by" variable name from the base table (left for left joins, right for right). 
+
+If any column names overlap that were not included in the join, the column name will be appended with either ".x" or ".y" depending on the source of the column. 
+
+
+
+```{r ch14_dplr1}
+# grab two related datasets
+
+  df9 <- mini_linelist
+  
+  df10 <- hosp_info
+
+# inner join example
+  
+  join_inner <- df9 %>%
+    inner_join(df10, by=c("hospital" = "hosp_name"))
+  
+# full join example
+  
+  join_full <- df9 %>%
+    full_join(df10, by=c("hospital" = "hosp_name"))
+  
+# directional join example
+  
+  join_left <- df9 %>%
+    left_join(df10, by=c("hospital" = "hosp_name"))
+  
+# anti join example
+  
+  join_anti <- df9 %>%
+    anti_join(df10, by=c("hospital" = "hosp_name"))
+
+
+
+```
+
+
+### Probabilistic Matching
+
+Let's say you've got two datasets that you know are related, but they don't have a unique identifying variable to directly join them together. 
+
+```{r ch14_pm1, exercise=TRUE}
+
+# create two datasets; one for cases and one for results
+  cases <- tribble(
+    ~gender, ~first,      ~middle,     ~last,        ~yr,   ~mon, ~day, ~district,
+    "M",     "Amir",      NA,          "Khan",       1989,  11,   22,   "River",
+    "M",     "Anthony",   "B.",        "Smith",      1970, 09, 19,      "River", 
+    "F",     "Marialisa", "Contreras", "Rodrigues",  1972, 04, 15,      "River",
+    "F",     "Elizabeth", "Casteel",   "Chase",      1954, 03, 03,      "City",
+    "M",     "Jose",      "Sanchez",   "Lopez",      1996, 01, 06,      "City",
+    "F",     "Cassidy",   "Jones",      "Davis",     1980, 07, 20,      "City",
+    "M",     "Michael",   "Murphy",     "O'Calaghan",1969, 04, 12,      "Rural", 
+    "M",     "Oliver",    "Laurent",    "De Bordow" , 1971, 02, 04,     "River",
+    "F",      "Blessing",  NA,          "Adebayo",   1955,  02, 14,     "Rural"
+  )
+  
+  results <- tribble(
+    ~gender,  ~first,     ~middle,     ~last,          ~yr, ~mon, ~day, ~district, ~result,
+    "M",      "Amir",     NA,          "Khan",         1989, 11,   22,  "River", "positive",
+    "M",      "Tony",   "B",         "Smith",          1970, 09,   19,  "River", "positive",
+    "F",      "Maria",    "Contreras", "Rodriguez",    1972, 04,   15,  "Cty",   "negative",
+    "F",      "Betty",    "Castel",   "Chase",        1954,  03,   30,  "City",  "positive",
+    "F",      "Andrea",   NA,          "Kumaraswamy",  2001, 01,   05,  "Rural", "positive",      
+    "F",      "Caroline", NA,          "Wang",         1988, 12,   11,  "Rural", "negative",
+    "F",      "Trang",    NA,          "Nguyen",       1981, 06,   10,  "Rural", "positive",
+    "M",      "Olivier" , "Laurent",   "De Bordeaux",  NA,   NA,   NA,  "River", "positive",
+    "M",      "Mike",     "Murphy",    "O'Callaghan",  1969, 04,   12,  "Rural", "negative",
+    "F",      "Cassidy",  "Jones",     "Davis",        1980, 07,   02,  "City",  "positive",
+    "M",      "Mohammad", NA,          "Ali",          1942, 01,   17,  "City",  "negative",
+    NA,       "Jose",     "Sanchez",   "Lopez",        1995, 01,   06,  "City",  "negative",
+    "M",      "Abubakar", NA,          "Abullahi",     1960, 01,   01,  "River", "positive",
+    "F",      "Maria",    "Salinas",   "Contreras",    1955, 03,   03,  "River", "positive"
+    )
+  
+
+
+```
+
+The two datasets seem pretty similar, but we need to figure out which cases go with each result, and there isn't a unique identifier to work with. This is a spot where the matching function fastLink() can be helpful. 
+
+```{r ch14_pm2, exercise = TRUE, warning=FALSE}
+
+
+
+# create a list containing information about probable matches
+  probable_matches_list <- fastLink::fastLink(
+    dfA = cases, # first data set
+    dfB = results, # second data set
+    varnames = c("gender", "first", "middle", "last", "yr", "mon", "day", "district"), # a list of variables in common that can be used to compare
+    stringdist.match = c("first", "middle", "last", "district"), # character fields in the varnames argument which can be used for "string distance matching". This is just a very fancy way of describing how similar a set of strings are. 
+    numeric.match = c("yr", "mon", "day"), # numeric fields in the varnames argument that can be used for numeric matching
+    threshold.match = 0.95 # the threshold for determining what matches 
+  )
+
+# review the matches dataset in the probable matches list
+probable_matches <- probable_matches_list$matches
+
+
+probable_matches
+
+
+```
+
+fastLink returned a data set inside the result list that shows the index positions of observations from both datasets where a match could be made. Also note that the birthdate was broken out into separate year/month/day values, so you can compare the components separately. This can be done by applying the year(), month(), day() functions of the lubridate package.
+
+To put it all together, we'll do a bit of cleaning and then join everything up. 
+
+```{r ch14_pm3}
+# load back in probable matches if needed
+if(!exists("probable_matches")){probable_matches = import(file=here("data", "probable_matches.rds"))}
+
+# convert cases rownames to a column for results and cases
+
+  cases_clean <- cases %>% rownames_to_column() # turn the row name (position) into its own column
+
+# convert test_results rownames to a column
+
+  results_clean <- results %>% rownames_to_column()  
+
+# convert all columns in matches dataset to character, so they can be joined to the rownames
+
+  matches_clean <- probable_matches %>%
+    mutate(across(everything(), as.character))
+
+
+# join cases to matches, and then results
+  complete <- cases_clean %>% 
+    left_join(matches_clean, by = c("rowname" = "inds.a")) %>%
+    left_join(results_clean, by = c("inds.b" = "rowname"))
+  
+  
+  head(complete)
+```
+
+**Note**: When you look at the final output data set "complete", you can see the field names that overlapped both sets, but not used in the join are appended with .x and .y, indicating their source data set. 
+
+<br><br>
+
+#### Probabalistic Deduplication
+
+
+```{r ch14_pm4, warning=FALSE}
+# add in a few dupes to the cases data set
+  
+  cases_dupes <- cases %>% bind_rows(
+    tribble(
+      ~gender, ~first,      ~middle,     ~last,        ~yr,   ~mon, ~day, ~district,
+      "M",    	"Tony",	    "B.",	       "Smith",	     1970,	9,    19,	  "River",
+      "F",	    "Maria",	  "Contreras",	"Rodriguez", 1972,	4,	  15,	  "River")
+  )  %>% rownames_to_column() # turn the row name (position) into its own column
+
+# run fastLink again, but this time compare the dataset to itself. 
+
+  dupes_list <- fastLink(
+    dfA = cases_dupes,
+    dfB = cases_dupes,
+    varnames = c("gender", "first", "middle", "last", "yr", "mon", "day", "district")
+  )
+
+# use getMatches() with the output from the last fasLink() to review and clean your dupes
+
+  cases_dedupe <- getMatches(
+    dfA = cases_dupes,
+    dfB = cases_dupes,
+    fl.out = dupes_list) %>%
+  filter(rowname != dedupe.ids) # change up from the book, I only want to review obs that looked like dupes
+  
+# review possible dupes
+
+  cases_dedupe
+
+
+```
+
+
+<br><br>
+
+### Binding and Aligning
+
+Joining data uses shared characteristics (one or more variables) to combine data sets side by side. Binding or appending datasets, either column- or row-wise is another way to bring data together, but may require a few different considerations. 
+
+**The Old Way**
+base rbind() and cbind()
+
+* order-dependent
+* number-dependent (requires either the same number of cols or rows on both sides)
+* kind of fussy
+
+<br><br>
+
+
+**A Better Way**
+dplyr's bind_rows() and bind_cols()
+
+* can be smart enough to not be quite as order-dependent (but does require things that match to be named identically)
+* adds columns or rows if needed
+
+#### Binding Rows with bind_rows()
+
+We'll start with an example.
+
+```{r ch4_bind1}
+
+# take two datasets
+
+  hosp_summary <- linelist_cleaned %>% 
+    group_by(hospital) %>%                        # Group data by hospital
+    summarise(                                    # Create new summary columns of indicators of interest
+      cases = n(),                                  # Number of rows per hospital-outcome group     
+      ct_value_med = median(ct_blood, na.rm=T))     # median CT value per group
+
+  hosp_summary
+  
+  totals <- linelist_cleaned %>% 
+    summarise(
+      cases = n(),                               # Number of rows for whole dataset     
+      ct_value_med = median(ct_blood, na.rm=T))  # Median CT for whole dataset
+  
+  totals
+  
+# append them vertically with bind_rows() and apply some formatting
+  
+  combined <- bind_rows(hosp_summary, totals, .id="src")  # the .id argument provides the source table as a new column
+    
+  
+  combined %>% mutate(hospital = if_else(is.na(hospital), "Total", hospital))
+  
+```
+
+This specific example can be generated a bunch of different ways, but we're using it to get an eye on the basic mechanics of how the function works. It also shows how bind_rows() doesn't strictly require the same columns and order in both data sets. It looks for the names and then includes everything. 
+
+
+
+<br><br>
+
+
+#### Binding Columns with bind_cols()
+
+Column-wise binding is similar to a join in that two or more datasets are stuck together side by side. Think of it as physically gluing to data sets together. If the data sets are ordered differently, you may hit a snag. In the next example, we'll give bind_cols a boost with the match() function. 
+
+```{r ch4_bind2}
+# grab a couple related data sets
+
+  case_info <- linelist_cleaned %>% 
+    group_by(hospital) %>% 
+    summarise(
+      cases = n(),
+      deaths = sum(outcome == "Death", na.rm=T)
+    )
+
+  case_info
+  
+  contact_fu <- data.frame(
+    hospital = c("St. Mark's Maternity Hospital (SMMH)", "Military Hospital", "Missing", "Central Hospital", "Port Hospital", "Other"),
+    investigated = c("80%", "82%", NA, "78%", "64%", "55%"),
+    per_fu = c("60%", "25%", NA, "20%", "75%", "80%")
+  )
+  
+  contact_fu
+  
+# use match to create a vector of how the second data set should line up with the first
+  
+  matched <- match(case_info$hospital, contact_fu$hospital)
+  
+  contact_fu_aligned <- contact_fu[matched, ]
+  
+# bind the first data set with the aligned dataset, and add a little formatting to clean up duplicate columns
+  
+  combined <- bind_cols(case_info, contact_fu_aligned)
+  
+  combined %>% 
+    select(
+      hospital = hospital...1,
+      cases, deaths, investigated, per_fu
+      
+    )
+
+```
+
+This is another example where there are a lot of different ways to achieve an outcome, but is helpful to see just to get a sense of how the functions work. 
+
+## Additional Links and Resources
+
+* [data.cdc.gov](https://data.cdc.gov/){target="_blank"}: for more API practice
+
+
+```{r cleanup, include=FALSE, echo=FALSE}
+
+```

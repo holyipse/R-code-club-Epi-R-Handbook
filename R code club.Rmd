@@ -24,6 +24,7 @@ pacman::p_load(
 	tidyverse,   # data management and visualization
 	tidyr,       # drop_na(), complete()
 	tidyselect,   # helper function; everything() to re-order columns, across(), summarise(), contains(), starts_with(), ends_with(), matches(), num_range(), any_of()
+	tigris,
 	RecordLinkage,  # probabilistic matches
 	fastLink,        # probabilistic matches
 	tibble
@@ -91,4 +92,26 @@ results <- tribble(
 
 
 ```
+
+
+## Duplications
+```{r Ch15 Duplication - Lesson 4}
+
+here()
+
+co.pop <- readRDS(here::here("data", "pop_new.rds"))
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
 
