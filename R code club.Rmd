@@ -18,15 +18,22 @@ pacman::p_load(
 	rio,          # importing data  
 	here,         # relative file pathways  
 	janitor,      # data cleaning and tables
+	tidyverse,    # data management and visualization
+	flextable,    # table manipulation
+	scales,
+	officer,      # table outline style
+	ggplot2, 
+	ggforce,      # ggplot extras
+	ggtext,       # 
+	stringr,      # working with characters
 	lubridate,    # working with dates; is.POSIXct()
 	matchmaker,   # dictionary-based cleaning
 	epikit,       # age_categories() function
-	tidyverse,   # data management and visualization
-	tidyr,       # drop_na(), complete()
+	tidyr,        # drop_na(), complete()
 	tidyselect,   # helper function; everything() to re-order columns, across(), summarise(), contains(), starts_with(), ends_with(), matches(), num_range(), any_of()
 	tigris,
-	RecordLinkage,  # probabilistic matches
-	fastLink,        # probabilistic matches
+	RecordLinkage,# probabilistic matches
+	fastLink,     # probabilistic matches
 	tibble
   )
 
@@ -106,6 +113,409 @@ co.pop <- readRDS(here::here("data", "pop_new.rds"))
 
 ```
 
+
+
+## Tables
+```{r Ch29 flextable}
+
+## data
+linelist <- import(here("data","linelist_cleaned.rds"))
+
+table # print
+
+#### 29.2 Basic flextable
+### Create a flextable
+my_table <- flextable(table) 
+my_table
+
+## general syntax of flextable code
+function(table, i = X, j = X, part = "X")
+# function can be width(), bg(), align(), etc. 
+# table is a data.frame
+# part refers to which part of the table the function is being applied to. "header", "body", or "all"
+# i = row; j = column
+
+### Column width
+my_table %>% autofit()
+# The function qflextable() is a convenient shorthand for flextable() and autofit()
+qflextable(table)
+# However, this might not always be appropriate
+
+## Instead, we can specify widths with the width() function
+my_table <- my_table %>% 
+  width(j=1, width = 2.7) %>% 
+  width(j=2, width = 1.5) %>% 
+  width(j=c(4,5,7,8), width = 1)
+
+my_table
+
+### Column headers
+# We want more clearer headers for easier interpretation of the table contents
+# For this table, we will want to add a second header layer so that columns covering the same subgroups can be grouped together.
+
+# 'add_header_row()' function with top = TRUE
+# We provide the new name of each column to values =, leaving empty values "" for columns we know we will merge together later.
+
+# 'set_header_labels()'
+# We also rename the header names in the now-second header in a separate 'set_header_labels()' command.
+
+# 'merge_at()'
+# Finally, to “combine” certain column headers in the top header we use 'merge_at()' to merge the column headers in the top header row.
+
+my_table <- my_table %>%
+	
+	add_header_row(
+		top = TRUE,
+		values = c(
+			"Hospital",
+			"Total cases with known outcome",
+			"Recovered",
+			"",
+			"",
+			"Died",
+			"",
+			""
+		)
+	) %>%
+	
+	set_header_labels(  # rename the original column names
+		hospital = "",
+		N_Known = "",
+		N_Recover = "Total",
+		Pct_Recover = "% of cases",
+		ct_value_Recover = "Median CT values",
+		N_Death = "Total",
+		Pct_Death = "% of cases",
+		ct_value_Death = "Median CT values"
+	) %>%
+	
+	merge_at(i=1, j=3:5, part="header") %>%
+	merge_at(i=1, j=6:8, part="header") %>%
+	merge_at(i=1:2, j=1, part = "header") %>%
+	merge_at(i=1:2, j=2, part = "header")
+
+
+my_table
+
+
+### Borders and background
+# 'border_remove()'
+# It is often easier to start by removing all existing borders with 'border_remove()'.
+
+# 'theme_box(), theme_booktabs(), or theme_alafoli()'
+# Then, you can apply default border themes by passing the table to theme_box(), theme_booktabs(), or theme_alafoli().
+
+# 'hline() and vline()'
+# You can add vertical and horizontal lines with a variety of functions. hline() and vline()
+
+# 'vline_right(), vline_left(), hline_top(), and hline_bottom()'
+# Other functions like vline_right(), vline_left(), hline_top(), and hline_bottom() add lines to the outsides only.
+
+# 'fp_border()' from the officer package
+# In all of these functions, the actual line style itself must be specified to border = and must be the output of 
+# a separate command using the fp_border() function from the officer package
+
+border_style = officer::fp_border(color="black", width=1)
+
+# add border lines to table
+my_table <- my_table %>% 
+	
+	# Remove all existing borders
+	border_remove() %>%
+	
+	# zebra pattern background 
+	theme_zebra(
+		odd_header = "transparent",
+		even_header = "transparent",
+		) %>%
+
+	# add horizontal lines via a pre-determined theme setting
+	theme_booktabs() %>%
+	
+    # add vertical lines to separate Recovered and Died sections
+	vline(part = "all", j=c(2,5), border = border_style)
+
+
+### Font and alignment
+# 'align()'
+# We center-align all columns aside from the left-most column with the hospital names, using the align()
+my_table <- my_table %>%
+	align(part="all", j=2:8, align = "center")
+
+# 'fontsize() and bold()'
+my_table <- my_table %>%
+	fontsize(part="header", i=1, size=14) %>%
+	bold(part="header", i=1, bold = TRUE) %>%
+	bold(part="body", i=7, bold=TRUE)
+
+# 'colformat_num()'
+# We can ensure that the proportion columns display only one decimal place using the function colformat_num().
+my_table <- colformat_num(my_table, j = c(4,7), digits = 1)
+my_table
+
+
+### Background color
+# 'bg()'
+# my_table <- my_table %>% 
+#     bg(part = "body", bg = "gray95")  
+
+flextable(table)
+
+```
+
+
+
+
+
+## ggplot basics
+```{r Ch30 ggplot basics}
+# 1/18/2024, Thursday
+
+
+#### 30.1 Preparation
+
+
+## import data
+linelist <- import(here("data","linelist_cleaned.rds"))
+
+
+# make display version of columns with more friendly names
+linelist <- linelist %>%
+  mutate(
+    gender_disp = case_when(gender == "m" ~ "Male",        # m to Male 
+                            gender == "f" ~ "Female",      # f to Female,
+                            is.na(gender) ~ "Unknown"),    # NA to Unknown
+    
+    outcome_disp = replace_na(outcome, "Unknown")          # replace NA outcome with "unknown"
+  )
+
+## new sub-dataset
+symptoms_data <- linelist %>% 
+  select(c(case_id, fever, chills, cough, aches, vomit))
+
+## If we wanted to plot the number of cases with specific symptoms, 
+# we are limited by the fact that each symptom is a specific column. 
+# However, we can pivot the symptoms columns to a longer format like this:
+symptoms_data_long <- symptoms_data %>%    # begin with "mini" linelist called symptoms_data
+  
+  pivot_longer(
+    cols = -case_id,                       # pivot all columns except case_id (all the symptoms columns)
+    names_to = "symptom_name",             # assign name for new column that holds the symptoms
+    values_to = "symptom_is_present") %>%  # assign name for new column that holds the values (yes/no)
+  
+  mutate(symptom_is_present = replace_na(symptom_is_present, "unknown")) # convert NA to "unknown"
+
+
+#### 30.2 Basics of ggplot
+## “Grammar of graphics” - ggplot2
+
+## basic order of layers
+## 1. Begin with the baseline ggplot() command 
+# - this “opens” the ggplot and allow subsequent functions to be added with +. 
+# Typically the dataset is also specified in this command
+
+## 2. Add “geom” layers - these functions visualize the data as geometries (shapes), 
+# e.g. as a bar graph, line plot, scatter plot, histogram (or a combination!). 
+# These functions all start with geom_ as a prefix.
+
+## 3. Add design elements to the plot 
+# such as axis labels, title, fonts, sizes, color schemes, legends, or axes rotation
+
+## A simple example of skeleton code is as follows
+
+# plot data from my_data columns as red points
+ggplot(data = my_data)+                   # use the dataset "my_data"
+  geom_point(                             # add a layer of points (dots)
+    mapping = aes(x = col1, y = col2),    # "map" data column to axes
+    color = "red")+                       # other specification for the geom
+  labs()+                                 # here you add titles, axes labels, etc.
+  theme()                                 # here you adjust color, font, size etc of non-data plot elements (axes, title, etc.) 
+
+
+#### 30.3 ggplot()
+# This will create plot that is a blank canvas
+ggplot(data = linelist)
+
+#### 30.4 Geoms
+## 2. Add “geom” layers - these functions visualize the data as geometries (shapes), 
+# e.g. as a bar graph, line plot, scatter plot, histogram (or a combination!). 
+# These functions all start with geom_ as a prefix.
+
+## Some common geoms are listed below:
+# Histograms - geom_histogram()
+# Bar charts - geom_bar() - bar plot without summary data
+# Bar charts - geom_col() - bar plot with summary data
+# Box plots - geom_boxplot()
+# Points (e.g. scatter plots) - geom_point()
+# Line graphs - geom_line() - line graph connected along X axis
+# Line graphs - geom_path()	- line graph connected in data order
+# Trend lines - geom_smooth()
+
+#### 30.5 Mapping data to the plot
+# This “mapping” occurs with the mapping = argument. 
+# The mappings you provide to mapping must be wrapped in the aes() function, 
+# so you would write something like mapping = aes(x = col1, y = col2), as shown below.
+
+## scatter plot
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+
+  geom_point()
+
+## histogram
+ggplot(data = linelist, mapping = aes(x = age))+
+  geom_histogram()
+
+
+### Plot aesthetics
+# In ggplot terminology a plot “aesthetic” has a specific meaning. 
+# It refers to a visual property of plotted data.
+
+## Therefore, plot object aesthetics can be colors, sizes, transparencies, placement, etc. of the plotted data.
+# Not all geoms will have the same aesthetic options, but many can be used by most geoms.
+# Here are some examples:
+
+# shape = Display a point with geom_point() as a dot, star, triangle, or square…
+# fill = The interior color (e.g. of a bar or boxplot)
+# color = The exterior line of a bar, boxplot, etc., or the point color if using geom_point()
+# size = Size (e.g. line thickness, point size)
+# alpha = Transparency (1 = opaque, 0 = invisible)
+# binwidth = Width of histogram bins
+# width = Width of “bar plot” columns
+# linetype = Line type (e.g. solid, dashed, dotted)
+
+## These plot object aesthetics can be assigned values in two ways:
+# Assigned a static value (e.g. color = "blue") to apply across all plotted observations
+# Assigned to a column of the data (e.g. color = hospital) such that display of each observation depends on its value in that column
+
+
+### Set to a static value
+# scatterplot
+ggplot(data = linelist, mapping = aes(x = age, y = wt_kg))+  # set data and axes mapping
+  geom_point(color = "darkgreen", size = 1, alpha = 0.2)         # set static point aesthetics
+
+# histogram
+ggplot(data = linelist, mapping = aes(x = age))+       # set data and axes
+  geom_histogram(              # display histogram
+    binwidth = 3,                # width of bins
+    color = "red",               # bin line color
+    fill = "blue",               # bin interior color
+    alpha = 0.1)                 # bin transparency
+
+
+
+### Scaled to column values
+# To achieve this, you map that plot aesthetic to a column name (not in quotes). 
+# This must be done within a mapping = aes() function 
+# (note: there are several places in the code you can make these mapping assignments)
+
+# scatterplot
+ggplot(data = linelist,   # set data
+       mapping = aes(     # map aesthetics to column values
+         x = age,           # map x-axis to age            
+         y = wt_kg,         # map y-axis to weight
+         color = age)       # map color to age
+       )+     
+  geom_point()            # display data as points 
+
+# scatterplot
+ggplot(data = linelist,   # set data
+       mapping = aes(     # map aesthetics to column values
+         x = age,           # map x-axis to age            
+         y = wt_kg,         # map y-axis to weight
+         color = age,       # map color to age
+         size = wt_kg))+      # map size to age
+  geom_point(             # display data as points
+    shape = "diamond",      # points display as diamonds
+    alpha = 0.3)            # point transparency at 30%
+
+
+## It becomes important to keep track of your plot layers and aesthetics when making more complex plots - 
+# for example plots with multiple geoms.
+ggplot(data = linelist,
+       mapping = aes(           # map aesthetics to columns
+         x = age,
+         y = wt_kg,
+         color = age_years)
+       ) + 
+  geom_point(                   # add points for each row of data
+    size = 1,
+    alpha = 0.5) +  
+  geom_smooth(                  # add a trend line 
+    method = "lm",              # with linear method
+    linewidth = 4)                   # size (width of line) of 2
+
+
+### Where to make mapping assignments
+# These commands will produce the exact same plot
+ggplot(data = linelist, mapping = aes(x = age))+
+  geom_histogram()
+
+ggplot(data = linelist)+
+  geom_histogram(mapping = aes(x = age))
+
+ggplot()+
+  geom_histogram(data = linelist, mapping = aes(x = age))
+
+
+### Groups
+# if you want points to be displayed by gender, you would set mapping = aes(color = gender).
+ggplot(data = linelist,
+       mapping = aes(x = age, y = wt_kg, color = gender_disp))+
+  geom_point(alpha = 0.5)
+# Note that depending on the geom, you will need to use different arguments to group the data. 
+# For geom_point() you will most likely use color =, shape = or size =. 
+# Whereas for geom_bar() you are more likely to use fill =. 
+
+
+
+
+#### 30.6 Facets / Small-multiples
+
+# Faceting is done with one of the following ggplot2 functions:
+# 
+## 1. facet_wrap() 
+# To show a different panel for each level of a single variable. 
+# One example of this could be showing a different epidemic curve for each hospital in a region. 
+# Facets are ordered alphabetically, unless the variable is a factor with other ordering defined.
+
+## You can invoke certain options to determine the layout of the facets, 
+# e.g. nrow = 1 or ncol = 1 to control the number of rows or columns that the faceted plots are arranged within.
+
+## 2. facet_grid() 
+# This is used when you want to bring a second variable into the faceting arrangement. 
+# Here each panel of a grid shows the intersection between values in two columns. 
+# For example, epidemic curves for each hospital-age group combination with hospitals along the top (columns) and 
+# age groups along the sides (rows).
+
+## nrow and ncol are not relevant, as the subgroups are presented in a grid
+
+## Each of these functions accept a formula syntax to specify the column(s) for faceting. Both accept up to two columns, one on each side of a tilde ~.
+
+## For facet_wrap() most often you will write only one column preceded by a tilde ~ like facet_wrap(~hospital). 
+# However you can write two columns facet_wrap(outcome ~ hospital) - each unique combination will display in a separate panel, 
+# but they will not be arranged in a grid. 
+# The headings will show combined terms and these won’t be specific logic to the columns vs. rows. 
+# If you are providing only one faceting variable, a period . is used as a placeholder on the other side of the formula - see the code examples.
+
+## For facet_grid() you can also specify one or two columns to the formula (grid rows ~ columns). 
+# If you only want to specify one, you can place a period . on the other side of the tilde like facet_grid(. ~ hospital) or 
+# facet_grid(hospital ~ .).
+
+## Facets can quickly contain an overwhelming amount of information - its good to ensure you don’t have too many levels of each variable that you choose to facet by. 
+
+# Below we import and do some quick modifications for simplicity:
+
+# These data are daily counts of malaria cases, by facility-day
+malaria_data <- import(here("data", "malaria_facility_count_data.rds")) %>%  # import
+  select(-submitted_date, -Province, -newid)                                 # remove unneeded columns
+
+
+
+
+
+
+
+
+```
 
 
 
