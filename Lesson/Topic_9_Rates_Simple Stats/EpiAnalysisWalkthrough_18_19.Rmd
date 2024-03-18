@@ -1,0 +1,335 @@
+---
+title: "EpiStats"
+author: "Sammie Haskin"
+date: "2023-2-12"
+output: 
+  learnr::tutorial:
+    theme: flatly
+runtime: shiny_prerendered
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(naniar)
+library(odbc)
+library(DBI)
+library(synthpop)
+library(here)
+library(tidyverse)
+library(learnr)
+tutorial_options(exercise.eval = TRUE)
+library(PHEindicatormethods) # for epidemiological methods (Public Health England)
+library(tidyquant) # for moving averages within ggplot
+library(rstatix) # for statistical tests
+library(slider) # for moving averages, moving sums, moving mins/maxes, etc.
+library(knitr) # table
+library(corrr) # package for correlations
+library(glue) # for combining variables in quotes
+library(gtsummary) # for statistical tests
+library(here) # for finding files in your directory
+
+data_directory=here('EpiStats_files')
+```
+
+[Chapter 21: Standardised Rates](https://epirhandbook.com/en/standardised-rates.html){target="_blank"}
+  
+
+### Notable Packages
+
+* [PHEindicatormethods](https://github.com/ukhsa-collaboration/PHEindicatormethods){target="_blank"}: working with public health indicators approved for production use in Public Health England 
+* [ggplot2](https://ggplot2.tidyverse.org/index.html){target="_blank"}: plots, maps, general visualization
+* [dplyr](https://dplyr.tidyverse.org/){target="_blank"}: suite of data manipulation with data tables
+
+
+### Statistics - Basics
+
+### Prep-work for analysis/statistics/data science:
+
+* Intention and Planning
+  * Determine the topic you want to learn from the data
+  * Clearly determine the population involved
+  * Make a preliminary educated guess as what you believe the data will show
+  * Plan while limiting the influence of any outside factors
+
+* Data Manipulation
+  1. Find related data and import tables
+  2. Filtering to the demographics of interest
+  3. Learn the data structure and relationships (descriptive statistics)
+  4. Preparing data for analysis (create/limit variables requisite calculations)
+   
+* Data Exploration
+  * Explore and make sense of the data (population size, variable tendencies)
+  * Simplify presentation to concise tables
+  * Allow the data to illustrate trends through Viz
+* Analysis and Reporting
+  * Use supported/approved tools, libraries, and methods
+  * Interpret the results
+  * Create reports that concisely show the results
+
+### Importing the data
+Using functions from tidyverse, we import data from the csv file format
+
+```{r importingCounts}
+### read_csv - tidyverse
+stdcore_synth <- read_csv(here(data_directory,'std_synth.csv'))
+stdcore_synth %>% colnames()
+```
+```{r showingCounts}
+stdcore_synth
+```
+
+
+
+
+
+```{r importingPopulations}
+population_2020 <-read_csv(here(data_directory,"national_std_pop.csv"))
+```
+
+### Viewing Populations data
+they have different columns, diferent variable types, etc
+```{r showingPopData}
+population_2020
+```
+
+### Connecting to external data sources
+```{r connectingSQL}
+
+# you can set this up on eDAV by following the instructions created
+# by Jamie
+# uses your credentials to securely connect to SQL without passwords
+
+dstdp_morb <- dbConnect(
+  
+  odbc(),
+  
+  driver = "SQL Server",
+  
+  server = "dspv-nifm-zsql1.hce.cdc.gov\\prod",
+  
+  database = "DSTDP_MORB",
+  
+  trusted_connection = TRUE)
+
+# quick function for getting dstdp_morb data sets if permissions (without modifying)
+dstdp_table_conn <- function(table,conn=dstdp_morb,db='DSTDP_MORB',schema="tempdb"){
+  dplyr::tbl(conn, dbplyr::in_catalog(db,schema=schema, table=table)) %>%
+    as_tibble()
+}
+
+```
+
+
+### Formatting datasets
+
+Formatting pop+count data sets for merging:
+Remember that the following columns are in the std counts data set: 
+  count - the column we want along with population data sets
+  state,year,age,racehybrid,sex - all columns for merging
+  
+So we have to make the names and data match:
+* state - character, fips code (keep as is)
+* year - integer (keep as is)
+* age_group - age (format as label in counts)
+* event - code (keep as is, not in pop)
+* sex - code (turn to label in counts)
+* racehybrid code (turn to label in counts)
+
+```{r formattingTheData}
+population_2020_prepped = population_2020 %>% 
+  group_by(state,race,sex, age=age_group) %>%
+  summarise(standardPop=sum(pop,na.rm=T))
+population_2020_prepped
+```
+
+### Statistics - Formatting the data sets 
+ Next we use the most up-to-date labels to match count codes to labels
+ first we create a function so we don't have to repeat the same code every time:
+```{r dasbhoardFunc}
+add_dashboard_labels <- function(codedTable, labelTable, codedVarName, newVarName = NA) {
+  # Check if the proposed new name already exists or is missing
+  if (newVarName == codedVarName || is.na(newVarName)) {
+    # If so, create a default new variable name
+    newVarName <- paste0(codedVarName, 'Category')
+  }
+  
+  # Create a formatted label table with selected variables and renamed columns
+  labelTableFmt <- labelTable %>%
+    select(!!codedVarName := value, !!newVarName := label)
+  
+  # Add labels to the original data set using left join
+  codedTable <- left_join(codedTable, labelTableFmt, by = codedVarName)
+  
+  # Return the modified data frame
+  return(codedTable)
+}
+```
+
+
+### Importing the labels that will accompany the data:
+```{r importingLabels}
+ageLabels <- dstdp_table_conn(table='LookupAge',schema='dashboard')
+sexLabels <- dstdp_table_conn(table='LookupSex',schema='dashboard')
+eventLabels <- dstdp_table_conn(table='LookupEvent',schema='dashboard')
+raceLabels <- dstdp_table_conn(table='LookupRaceLegacy',schema='dashboard')
+racehybridLabels <- dstdp_table_conn(table='LookupRaceHybrid',schema='dashboard')
+jurisdictions <- dstdp_table_conn(table='Jurisdictions',schema='lkp')
+print(jurisdictions)
+
+
+``` 
+
+### Formatting the labels 
+```{r stateLabels}
+# note on quotes: if you use dplyr functions, you don't always need to quote vars
+stateLabels<-jurisdictions %>% 
+  filter(str_like(TYPE,'%state%')) %>% # get only state labels
+  select(value=FIPSc,label=NAME) %>% # we only need these two columns
+  arrange(value) %>% # sort the data in this order
+  mutate(order=row_number(),.before=value)
+stateLabels
+```
+
+### Steps Formatting the counts data to work with Standardization:
+We have our data and our labels. Now we have to
+  1) add labels so that variable types match 
+  2) merge on the matching fields to get standardized pop in the counts table
+
+```{r AddLabels}
+
+stdcore_synth_categories <- stdcore_synth %>% 
+  # applying the custom functions to add  category descriptions for all codes
+  add_dashboard_labels(ageLabels,"age") %>%
+  add_dashboard_labels(eventLabels,"event","eventName") %>%
+  add_dashboard_labels(racehybridLabels,"racehybrid","race") %>%
+  add_dashboard_labels(stateLabels,"state","stateName") %>%
+  add_dashboard_labels(sexLabels,"sex") %>%
+  add_dashboard_labels(eventLabels,"event")
+
+  # retrieve only the following variables and rename to name on left of =
+stdcore_synth_prepped <- stdcore_synth_categories %>%
+  select(state, stateName,year,race,sex=sexCategory,
+         age=ageCategory,pop,event,eventName,count,rate)
+  
+ stdcore_synth_prepped 
+
+```
+```{r mergingCountsPop}
+# joining standardized pop to original data set
+stdcore_synth_final <-stdcore_synth_prepped %>%
+  left_join(population_2020_prepped,
+            by=join_by(state,race,sex,age)
+  )
+
+stdcore_synth_final
+```
+
+
+```{r standardizedRates}
+
+stdcore_synth_final_grouped <- stdcore_synth_final %>%
+  group_by(race,year,eventName)
+
+# calculate rates by race, year, and disease
+# assuming population counts and proportions similar to national 2020 census demographics 
+# directly standardized rates
+# value --> standardized rate, lowercl --> 2.5th percentile, uppercl --> 97.5th percentile
+dsr_test<-  phe_dsr(
+  data=stdcore_synth_final_grouped,
+  x=count,
+  n=pop,
+  stdpop = standardPop,
+  stdpoptype = "field",
+  type = "full",
+  confidence = 0.95,
+  multiplier = 100000
+)
+dsr_test %>% arrange(race,eventName,year)
+print(dsr_test)
+```
+
+
+
+
+
+
+### Before controlling for population size
+```{r beforeControlling}
+# these are the unstandardized rates that don't hold pop demographics constant
+stdcore_synth_final_grouped %>%
+  summarise(rate=sum(count) / sum(pop) * 100000) %>%
+  ggplot(aes(x=year,y=rate,color=race)) +
+  geom_line() +
+  facet_wrap(~eventName) + 
+  labs(x='Year',y='Rate per 100,000') +
+  ggtitle("Rates of STDs by Race After controlling for the effect of population size")
+
+```
+
+
+
+
+
+
+### After controlling for population size
+```{r afterStandardizingRates}
+# value is the rate after adjusting for population rates/counts
+dsr_test %>%
+  ggplot(aes(x=year,y=value,color=race)) +
+  geom_line() +
+  facet_wrap(~eventName) + 
+  labs(x='Year',y='Rate per 100,000') +
+  ggtitle("Rates of STDs by Race After controlling for the effect of population size")
+```
+
+```{r movingAverages}
+# convenience function for calculating centered moving averages,sums,max,etc. over time
+# default is mean, doesn't remove values with less than 2 neighboring points
+# x - what we are calculating moving averages for (generally counts)
+# i - uses year by default to avg counts for (year-1,year,year+1)
+# takes a dataframe you specify what to columns to calculate moving averages for
+
+centeredRollingEventCount <- function(df,x='count',i='year',agg_function=mean,spread=3){
+  slide_index_dbl(.x=df[[x]],.i=df[[i]],.f=agg_function,.before=round((spread-1)/2),.after=round((spread-1)/2))
+}
+
+dsr_test_mvg<-dsr_test %>% 
+  ungroup() %>% # dsr_test was still grouped by race,year,eventName
+  arrange(race,eventName,year) %>% # slider complains if not sorted
+  group_split(race,eventName) %>% # split by combination of race and event
+   lapply(function(df){ # temporary function operating on the current dataframe
+      # simplified, breaks into 2 separate steps, averages year - 1, current year, year + 1
+      rates_vector <- df %>% centeredRollingEventCount(x='value',i='year',agg_function=mean)
+      # add the previously calculated rates to the original table and return
+      df_mavg <- df  %>%  mutate(moving_rate=rates_vector)
+  return(df_mavg)
+      }
+  ) %>% bind_rows() # combine separate dataframes
+  
+```
+
+```{r dsr_viz}
+# visualizing the moving average of rate (moving_rate) vs the actual rate (value)
+dsr_test_mvg %>%
+  ggplot(aes(x=year,y=value,color=race)) +
+  geom_point() +
+  geom_line(aes(x=year,y=moving_rate,color=race)) +
+  facet_wrap(~eventName) + 
+  labs(x='Year',y='Rate per 100,000') +
+  ggtitle("Rates of STDs by Race After controlling for the effect of population size")
+
+```
+
+```{r dsr_viz_two}
+# using another smoothing technique (loess) to loosely replicate the previous graph
+# without moving averages
+dsr_test_mvg %>%
+  ggplot(aes(x=year,y=value,color=race)) +
+  geom_point() +
+  geom_smooth(se=F) +
+  facet_wrap(~eventName) + 
+  labs(x='Year',y='Rate per 100,000') +
+  ggtitle("Rates of STDs by Race After controlling for the effect of population size")
+
+```
